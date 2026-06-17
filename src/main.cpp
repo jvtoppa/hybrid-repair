@@ -4,7 +4,8 @@
 #include <algorithm>
 #include <string>
 #include <sstream>  
-#include "gcis.h"
+#include "gcis/gcis.h"
+#include "repair/repair.h"
 #include <functional>
 #include <chrono>
 using namespace std;

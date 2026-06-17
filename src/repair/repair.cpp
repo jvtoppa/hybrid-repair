@@ -9,23 +9,6 @@
 
 using namespace std;
 
-
-
-void Repair::print() {
-
-  cout << "Hashtable\n";
-  printHashTable();
-  cout << "\n";
-  
-  cout << "Queue\n";
-  q.print();
-  cout << "\n";
-
-  cout << "Sequence\n";
- seq.printConnections();
-}
-
-
 void Repair::insert(PAIR* p, st current_position)
 {  
     auto key = make_pair(p->left, p->right);
@@ -85,8 +68,6 @@ void Repair::firstPass(bool verbose)
         insert(new_pair, i); 
     }
 
-    if(verbose)
-    print();
     
 }
 
@@ -205,9 +186,6 @@ void Repair::compress(bool verbose)
 
 
     ctr++;
-    if(verbose)
-    print();
-    
     }
 
 }

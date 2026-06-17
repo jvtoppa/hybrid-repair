@@ -5,9 +5,10 @@
 #include <vector>
 #include <climits>
 #include <string>
-#include <math.h>
+#include <cmath>
 #include <fstream>
 #include <unordered_map>
+#include <unordered_set>
 #include "../include/queue.h"
 #include "../include/threaded_sequence.h"
 #include "../include/utils.h"
@@ -29,101 +30,95 @@ private:
     void replace(st position);
     void insert(PAIR* p, st current_position);
     void firstPass(bool verbose);
-    void compactify();
     void compress(bool verbose);
-    void printHashTable();
     void removeFromOccList(PAIR* p, st pos);
-
+    void writeuint(size_t s, string& bitString, size_t maxRules);
+    void encodeCFG_rec(size_t sy, const vector<size_t>& ruleHistory, string& bitString, size_t maxRules, unordered_set<size_t>& seen);
+    
 public:
     
     Repair(const string& input);
     ~Repair();
-    void run(bool verbose = false, bool verbose2 = false)
-    {
-        if(verbose) cout << "[VERBOSE] Running first pass...\n";
-        firstPass(verbose2);
-        if(verbose) cout << "[VERBOSE] Compressing...\n";
-        compress(verbose2);
-        if(verbose) cout << "[VERBOSE] Compression ended.\n[VERBOSE] Encoding...";
-
-    }
-
+    
+    void run(bool verbose = false, bool verbose2 = false);
     TSEQ getSequence() { return this->seq;}
     vector<size_t> getRuleHistory() { return this->ruleHistory;}
     void output(bool verbose = false);
-    void print();
-    void encode();
+    string encode();
     template<typename T> void serialize(string filename, const T& serialized);
+    
 };
 
- 
-
-inline void Repair::compactify()
+inline void Repair::run(bool verbose, bool verbose2)
 {
-    vector<SEQ> seq_new;
-
-    for (st i = 0; i < seq.size(); i++) {
-        if (seq[i].code != N) {
-            seq_new.push_back(seq[i]);
-        } 
-        else if (seq[i].next < seq.size()) { 
-            i = seq.next(i) - 1;
-        }
-    }
-
-    st newStringSize = seq_new.size();
-    st oldStringSize = seq.size();
-
-    unordered_map<st, st> posMap;
-
-    st oldPos = 0;
-    st newPos = 0;
-
-    while (oldPos < oldStringSize && newPos < newStringSize) {
-        if (seq[oldPos].code != N) {
-            posMap[oldPos] = newPos;
-            newPos++;
-        }
-        oldPos++;
-    }
-
-    for (auto& pair_entry : ht) {
-        PAIR* p = pair_entry.second;
-
-        if (posMap.count(p->f_pos))
-            p->f_pos = posMap[p->f_pos];
-
-        if (posMap.count(p->b_pos))
-            p->b_pos = posMap[p->b_pos];
-    }
-
-    for (st i = 0; i < seq_new.size(); i++) {
-        if (seq_new[i].prev != N && posMap.count(seq_new[i].prev)) {
-            seq_new[i].prev = posMap[seq_new[i].prev];
-        } else {
-            seq_new[i].prev = N;
-        }
-
-        if (seq_new[i].next != N && posMap.count(seq_new[i].next)) {
-            seq_new[i].next = posMap[seq_new[i].next];
-        } else {
-            seq_new[i].next = N;
-        }
-    }
-
-    seq = std::move(seq_new);
+    if(verbose) cout << "[VERBOSE] Running first pass...\n";
+    firstPass(verbose2);
+    if(verbose) cout << "[VERBOSE] Compressing...\n";
+    compress(verbose2);
+    if(verbose) cout << "[VERBOSE] Compression ended.\n[VERBOSE] Encoding...";
+    encode()
+    if(verbose) cout << "[VERBOSE] Done.";
+    
 }
 
-inline void Repair::printHashTable()
+inline void Repair::writeuint(size_t s, string& bitString, size_t maxRules)
 {
-    for (const auto &entry : ht)
+    int bitsLen = (maxRules <= 1) ? 1 : static_cast<int>(floor(log2(maxRules))) + 1;
+    
+    for (int bitPosition = bitsLen - 1; bitPosition >= 0; --bitPosition)
     {
-        cout << "(" << entry.first.first << ", " << entry.first.second << ") "
-             << "-> freq: " << entry.second->freq
-             << ", f_pos: " << (entry.second->f_pos == N ? "NULL" : to_string(entry.second->f_pos))
-             << ", b_pos: " << (entry.second->b_pos == N ? "NULL" : to_string(entry.second->b_pos))
-             << endl;
+        bitString.push_back(((s >> bitPosition) & 1) ? '1' : '0');
     }
+}
+
+inline void Repair::encodeCFG_rec(size_t sy, const vector<size_t>& ruleHistory, string& bitString, size_t maxRules, unordered_set<size_t>& seen)
+{
+    if (sy >= 256 && seen.find(sy) == seen.end())
+    {
+        seen.insert(sy);
+        size_t leftRule = 2 * (sy - 256);
+        size_t rightRule = 2 * (sy - 256) + 1;
+
+        if (rightRule >= ruleHistory.size())
+        {
+            cerr << "Error: Invalid rule index for symbol " << sy << endl;
+            return;
+        }
+        
+        bitString.push_back('1');
+        
+        size_t left = ruleHistory[leftRule];
+        size_t right = ruleHistory[rightRule];
+        
+        encodeCFG_rec(left, ruleHistory, bitString, maxRules, seen);
+        encodeCFG_rec(right, ruleHistory, bitString, maxRules, seen);
+    }
+    else
+    {   
+        bitString.push_back('0');
+        writeuint(sy, bitString, maxRules);
+    }
+}
+
+inline string Repair::encode()
+{
+    string bitString;
+    unordered_set<size_t> seen;
+    vector<size_t> _seq;
+    for(const auto& c : seq)
+    {
+        if(c.code != N)
+        {
+            _seq.push_back(c.code);
+        }
+    }
+    size_t maxRules = 256 + (ruleHistory.size() / 2); 
+
+    for (size_t s : _seq)
+    {
+        encodeCFG_rec(s, ruleHistory, bitString, maxRules, seen);
+    }
+    return bitString;
 }
 
 template<typename T> inline void Repair::serialize(string filename, const T& serialized)
@@ -181,8 +176,6 @@ inline void Repair::output(bool verbose)
     this->serialize<vector<st>>("../output/rulehistory.rp", this->ruleHistory);
     cout << "\n Rule History size: " << ruleHistory.size() << "\n";
     cout << "\n Compressed text size: " << c << "\n";
-    
-    bool check_correctness();
 }   
 
 inline Repair::Repair(const std::string& input) : q(input), seq(input), rule(255){}
