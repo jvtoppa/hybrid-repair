@@ -23,7 +23,7 @@ class TSEQ
 private:
     vector<SEQ> seq;
 public:
-    TSEQ(const string& s);
+    TSEQ(const vector<size_t>& s);
     ~TSEQ(){};
     void printConnections() const;
     st next(st pos);
@@ -58,13 +58,13 @@ public:
 
 };
 
-inline TSEQ::TSEQ(const string& s)
+inline TSEQ::TSEQ(const vector<size_t>& s)
 {
     st string_size = s.size();
     seq.resize(string_size);
     for (st i = 0; i < string_size; i++)
     {
-        seq[i].code = static_cast<unsigned char>(s[i]);
+        seq[i].code = s[i];
     }
 }
 

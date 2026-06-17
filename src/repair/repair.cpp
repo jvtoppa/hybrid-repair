@@ -144,15 +144,13 @@ void Repair::replace(st position)
     }
 }
 
-void Repair::compress(bool verbose)
+void Repair::gen(bool verbose)
 {
 
   long ctr = 1;
   
     while (!q.empty())
     {
-        if(verbose)
-        cout << "\nRound " << ctr << "\n";
     
         PAIR* mostFreqPair = q.pop_max();
         if(!mostFreqPair || mostFreqPair->freq < 2) break;

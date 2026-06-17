@@ -9,6 +9,7 @@
 #include <fstream>
 #include <unordered_map>
 #include <unordered_set>
+#include <type_traits>
 #include "../include/queue.h"
 #include "../include/threaded_sequence.h"
 #include "../include/utils.h"
@@ -24,23 +25,24 @@ private:
     TSEQ seq;
     st rule;
     vector<st> ruleHistory;
+    size_t alpha_size;
 
     void findAdjPairs(vector<st>& pairPos, st position);
     void decrease(st pos);
     void replace(st position);
     void insert(PAIR* p, st current_position);
     void firstPass(bool verbose);
-    void compress(bool verbose);
+    void gen(bool verbose);
     void removeFromOccList(PAIR* p, st pos);
     void writeuint(size_t s, string& bitString, size_t maxRules);
-    void encodeCFG_rec(size_t sy, const vector<size_t>& ruleHistory, string& bitString, size_t maxRules, unordered_set<size_t>& seen);
+    void encodeCFG_rec(size_t sy, const vector<size_t>& ruleHistory, string& bitString, size_t maxRules, unordered_set<size_t>& seen, size_t alpha_size);
     
 public:
     
-    Repair(const string& input);
+    Repair(const vector<size_t>& input);
     ~Repair();
     
-    void run(bool verbose = false, bool verbose2 = false);
+    string compress(bool verbose = false, bool verbose2 = false);
     TSEQ getSequence() { return this->seq;}
     vector<size_t> getRuleHistory() { return this->ruleHistory;}
     void output(bool verbose = false);
@@ -49,16 +51,16 @@ public:
     
 };
 
-inline void Repair::run(bool verbose, bool verbose2)
+inline string Repair::compress(bool verbose, bool verbose2)
 {
     if(verbose) cout << "[VERBOSE] Running first pass...\n";
     firstPass(verbose2);
     if(verbose) cout << "[VERBOSE] Compressing...\n";
-    compress(verbose2);
-    if(verbose) cout << "[VERBOSE] Compression ended.\n[VERBOSE] Encoding...";
-    encode()
+    gen(verbose2);
+    if(verbose) cout << "[VERBOSE] Compression ended.\n[VERBOSE] Encoding...\n";
+    string enc = encode();
     if(verbose) cout << "[VERBOSE] Done.";
-    
+    return enc;
 }
 
 inline void Repair::writeuint(size_t s, string& bitString, size_t maxRules)
@@ -71,30 +73,26 @@ inline void Repair::writeuint(size_t s, string& bitString, size_t maxRules)
     }
 }
 
-inline void Repair::encodeCFG_rec(size_t sy, const vector<size_t>& ruleHistory, string& bitString, size_t maxRules, unordered_set<size_t>& seen)
+inline void Repair::encodeCFG_rec(size_t sy, const vector<size_t>& ruleHistory,
+    string& bitString, size_t maxRules, unordered_set<size_t>& seen, size_t alpha_size)
 {
-    if (sy >= 256 && seen.find(sy) == seen.end())
+    if (sy >= alpha_size && seen.find(sy) == seen.end())
     {
         seen.insert(sy);
-        size_t leftRule = 2 * (sy - 256);
-        size_t rightRule = 2 * (sy - 256) + 1;
+        size_t leftRule  = 2 * (sy - alpha_size);
+        size_t rightRule = 2 * (sy - alpha_size) + 1;
+        if (rightRule >= ruleHistory.size()) { cerr << "Error\n"; return; }
 
-        if (rightRule >= ruleHistory.size())
-        {
-            cerr << "Error: Invalid rule index for symbol " << sy << endl;
-            return;
-        }
-        
         bitString.push_back('1');
-        
-        size_t left = ruleHistory[leftRule];
+        writeuint(sy, bitString, maxRules);
+
+        size_t left  = ruleHistory[leftRule];
         size_t right = ruleHistory[rightRule];
-        
-        encodeCFG_rec(left, ruleHistory, bitString, maxRules, seen);
-        encodeCFG_rec(right, ruleHistory, bitString, maxRules, seen);
+        encodeCFG_rec(left,  ruleHistory, bitString, maxRules, seen, alpha_size);
+        encodeCFG_rec(right, ruleHistory, bitString, maxRules, seen, alpha_size);
     }
     else
-    {   
+    {
         bitString.push_back('0');
         writeuint(sy, bitString, maxRules);
     }
@@ -103,20 +101,37 @@ inline void Repair::encodeCFG_rec(size_t sy, const vector<size_t>& ruleHistory, 
 inline string Repair::encode()
 {
     string bitString;
-    unordered_set<size_t> seen;
-    vector<size_t> _seq;
-    for(const auto& c : seq)
+    size_t totalRulesNum = ruleHistory.size() / 2;
+    size_t maxRules = this->alpha_size + totalRulesNum;
+    int bitsLen = (maxRules <= 1) ? 1 : static_cast<int>(floor(log2(maxRules))) + 1;
+
+    for (int i = 31; i >= 0; --i)
     {
-        if(c.code != N)
-        {
-            _seq.push_back(c.code);
-        }
+        bitString.push_back(((this->alpha_size >> i) & 1) ? '1' : '0');
     }
-    size_t maxRules = 256 + (ruleHistory.size() / 2); 
+    for (int i = 31; i >= 0; --i)
+    {
+        bitString.push_back(((totalRulesNum >> i) & 1) ? '1' : '0');
+    }
+
+    for (size_t i = 0; i < totalRulesNum; i++)
+    {
+        size_t left  = ruleHistory[2 * i];
+        size_t right = ruleHistory[2 * i + 1];
+        for (int b = bitsLen - 1; b >= 0; --b)
+            bitString.push_back(((left  >> b) & 1) ? '1' : '0');
+        for (int b = bitsLen - 1; b >= 0; --b)
+            bitString.push_back(((right >> b) & 1) ? '1' : '0');
+    }
+
+    vector<size_t> _seq;
+    for (const auto& c : seq)
+        if (c.code != N) _seq.push_back(c.code);
 
     for (size_t s : _seq)
     {
-        encodeCFG_rec(s, ruleHistory, bitString, maxRules, seen);
+        for (int b = bitsLen - 1; b >= 0; --b)
+            bitString.push_back(((s >> b) & 1) ? '1' : '0');
     }
     return bitString;
 }
@@ -151,14 +166,7 @@ inline void Repair::output(bool verbose)
     {
         if(seq[i].code != N)
         {
-            if(seq[i].code < 128)
-            {
-                cout << static_cast<char>(seq[i].code);
-            }
-            else
-            {
-                cout << "["  << static_cast<size_t>(seq[i].code) << "]";
-            }
+            cout << "["  << static_cast<size_t>(seq[i].code) << "]";
         }
     }
     cout << "\nRule History: ";
@@ -178,7 +186,16 @@ inline void Repair::output(bool verbose)
     cout << "\n Compressed text size: " << c << "\n";
 }   
 
-inline Repair::Repair(const std::string& input) : q(input), seq(input), rule(255){}
+inline Repair::Repair(const std::vector<size_t>& input) : q(input), seq(input)
+{
+    size_t max_val = 0;
+    for (size_t val : input)
+    {
+        if (val > max_val) max_val = val;
+    }
+    this->alpha_size = max_val + 1; 
+    this->rule = this->alpha_size - 1;
+}
 
 inline Repair::~Repair()
 {
@@ -197,39 +214,95 @@ struct Paired
 
 class Despair
 {
-    private:
-    static void expand(size_t symbol, const vector<Paired>& rules, vector<size_t>& out)
+private:
+    static size_t readuint(const string& bitString, size_t& bitPos, size_t maxRules)
     {
-        
-        if (symbol <= 255)
+        int bitsLen = (maxRules <= 1) ? 1 : static_cast<int>(floor(log2(maxRules))) + 1;
+        size_t value = 0;
+        for (int i = 0; i < bitsLen; ++i)
+        {
+            value <<= 1;
+            if (bitString[bitPos++] == '1') value |= 1;
+        }
+        return value;
+    }
+
+    static size_t decodeCFG_rec(const string& bitString, size_t& bitPos,
+        vector<Paired>& rules, size_t maxRules, size_t& nextRuleID, size_t alpha_size)
+    {
+        char flag = bitString[bitPos++];
+        if (flag == '1')
+        {
+            size_t currentRuleID = readuint(bitString, bitPos, maxRules);  // ← read explicit ID
+            size_t left  = decodeCFG_rec(bitString, bitPos, rules, maxRules, nextRuleID, alpha_size);
+            size_t right = decodeCFG_rec(bitString, bitPos, rules, maxRules, nextRuleID, alpha_size);
+            rules[currentRuleID - alpha_size] = {left, right};
+            return currentRuleID;
+        }
+        else
+        {
+            return readuint(bitString, bitPos, maxRules);
+        }
+    }
+
+    static void expand(size_t symbol, const vector<Paired>& rules, vector<size_t>& out, size_t alpha_size)
+    {
+        if (symbol < alpha_size)
         {
             out.push_back(symbol);
         } 
         else
         {
-            expand(rules[symbol - 256].left, rules, out);
-            expand(rules[symbol - 256].right, rules, out);
+            expand(rules[symbol - alpha_size].left, rules, out, alpha_size);
+            expand(rules[symbol - alpha_size].right, rules, out, alpha_size);
         }
     }
-    public:
-    static vector<size_t> despair(const vector<size_t>& sequence, const vector<size_t>& ruleHistory)
+
+public:
+static vector<size_t> decompress(const string& bitString)
+{
+    size_t bitPos = 0;
+
+    auto readBits = [&](size_t maxRules, size_t count) -> size_t
     {
-        vector<size_t> decoded_sequence;
-        vector<Paired> rules;
-        rules.reserve(ruleHistory.size() / 2);
-        for(size_t i = 0; i < ruleHistory.size(); i += 2)
+        int bitsLen = (maxRules <= 1) ? 1 : static_cast<int>(floor(log2(maxRules))) + 1;
+        size_t value = 0;
+        for (int i = 0; i < bitsLen; ++i)
         {
-            Paired p;
-            p.left = ruleHistory[i];
-            p.right = ruleHistory[i+1];
-            rules.push_back(p);
+            value <<= 1; if (bitString[bitPos++] == '1') value |= 1;
         }
-        for (size_t symbol : sequence)
-        {
-            expand(symbol, rules, decoded_sequence);
-        }
-        return decoded_sequence;
+        return value;
+    };
+
+    size_t alpha_size = 0;
+    for (int i = 0; i < 32; i++)
+    {
+        alpha_size <<= 1; if (bitString[bitPos++] == '1') alpha_size |= 1;
     }
+    
+    size_t totalRulesNum = 0;
+    for (int i = 0; i < 32; i++)
+    {
+        totalRulesNum <<= 1; if (bitString[bitPos++] == '1') totalRulesNum |= 1;
+    }
+
+    size_t maxRules = alpha_size + totalRulesNum;
+
+    vector<Paired> rules(totalRulesNum);
+    for (size_t i = 0; i < totalRulesNum; i++)
+    {
+        rules[i].left  = readBits(maxRules, 0);
+        rules[i].right = readBits(maxRules, 0);
+    }
+
+    vector<size_t> decoded_sequence;
+    while (bitPos < bitString.size())
+    {
+        size_t symbol = readBits(maxRules, 0);
+        expand(symbol, rules, decoded_sequence, alpha_size);
+    }
+    return decoded_sequence;
+}
 };
 
 

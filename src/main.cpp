@@ -6,6 +6,7 @@
 #include <sstream>  
 #include "gcis/gcis.h"
 #include "repair/repair.h"
+#include "../../include/utils.h"
 #include <functional>
 #include <chrono>
 using namespace std;
@@ -34,58 +35,34 @@ int main(int argc, char* argv[])
 		T.resize(cin.gcount());
 
 	}
-    auto start = chrono::high_resolution_clock::now();    
-    vector<uint64_t> c;
-    {
-    GCIS<uint32_t> compressor(T);
-   // T.clear();
-    c = compressor.compress
-    (
-    [&compressor]() -> bool
-    {
-        if (compressor.getCFG().empty()) 
-        {
-            return true; 
-        }
+    vector<size_t> s;
+    for(auto c : T) s.push_back(c);
+    Repair compressor(s);
+    string compressed = compressor.compress(true, true);
+    cout << "Compressed + encoded size: " << compressed.size() << " bits.";
 
-        return compressor.getCFG().size() != (compressor.getAlphabet_size() - 1); //Get pidgeonholed!
-    }
-    );
-    cout << "\n\n --- \n\n";
-    auto end = chrono::high_resolution_clock::now();
-    chrono::duration<double, milli> time = end - start;
-    cout << "Compression time: "<< time.count() << "ms\n";
-    
-    }
-    
-    auto start2 = chrono::high_resolution_clock::now();
-    auto decompressed = GCIS<uint32_t>::decompress(c);
-    auto end2 = chrono::high_resolution_clock::now();
-    
-    
-    chrono::duration<double, milli> time2 = end2 - start2;
-    
-    cout << "Decompression time: "<< time2.count() << "ms\n";
-    #ifdef EXPERIMENT
+    cout << "\n\n---\n\nChecking correctness: \n";
     bool fail = false;
-    
-    for (size_t i = 0; i < T.size(); i++)
+    vector<size_t> d = Despair::decompress(compressed);
+    string decomp = "";
+    size_t count = 0;
+    for(char c : d)
     {
-        unsigned char orig_byte = static_cast<unsigned char>(T[i]);
-        [[unlikely]] if(orig_byte != decompressed[i])
-        {fail = true; cout << i << ", T[i] = " << static_cast<int>(orig_byte) << " decompressed[i] = " << decompressed[i] << "\n"; break;}
-        
+        if(c != static_cast<char>(s[count]))
+        {
+            cout << "decompressed: "<<c << "\n\n original: " << s[count] << "\n"; 
+            
+            fail = true;    
+        }
+        count++;
     }
-    if(fail)
+    if(!fail)
     {
-        cout << "Failed to decompress... Output: ";
-        for(char token : decompressed)
-        cout << token;
-        cout << "\n";
+        cout << "Correct.\n";
     }
     else
-    cout << "[CONSOLE] Decompression worked!\n";
-    #endif
-   
-    cout << "Final size of compression: " <<c.size()*8 / 1e+6 << "mb\n";
+    {
+        cout << "Incorrect.\n";
+    }
+
 }

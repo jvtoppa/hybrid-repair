@@ -18,7 +18,7 @@ private:
     vector<PAIRNODE*> q;
 public:
     st largest_pair_pos = 0;
-    QUEUE(const string& s);
+    QUEUE(const vector<size_t>& s);
     ~QUEUE();
     void print() const;
     void addPair(PAIR* p);
@@ -46,7 +46,7 @@ public:
 
 };
 
-inline QUEUE::QUEUE(const string& s)
+inline QUEUE::QUEUE(const vector<size_t>& s)
 {
     size_t size = static_cast<size_t>(sqrt(s.size())) + 2;
     q.resize(size);
