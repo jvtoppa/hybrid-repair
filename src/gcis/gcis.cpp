@@ -200,7 +200,6 @@ void GCIS<T>::findCFGandRules()
             this->global_suffixes.push_back(input[k]);
         }
         
-        // FIX: The prefix is the 0-th rule added at this level, so it must be token 0.
         CFG[0] = 0; 
         current_name = 2;
     }
@@ -217,8 +216,6 @@ void GCIS<T>::findCFGandRules()
 
         if (prev_lms == -1)
         {
-            // FIX: Assign token based on current_name to handle both cases 
-            // (first_lms_pos > 0 and first_lms_pos == 0) dynamically.
             CFG[cfg_index] = static_cast<T>(current_name - 1); 
             
             this->global_lcps.push_back(0);

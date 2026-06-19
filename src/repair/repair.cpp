@@ -5,6 +5,7 @@
 #include <string>
 #include <math.h>
 #include <unordered_map>
+#include <functional>
 #include "repair.h"
 
 using namespace std;
@@ -144,12 +145,12 @@ void Repair::replace(st position)
     }
 }
 
-void Repair::gen(bool verbose)
+void Repair::gen(function<bool()> stop_condition, bool verbose)
 {
 
   long ctr = 1;
   
-    while (!q.empty())
+    while (stop_condition)
     {
     
         PAIR* mostFreqPair = q.pop_max();

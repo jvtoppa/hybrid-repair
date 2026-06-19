@@ -20,7 +20,6 @@ struct GrammarData {
     vector<uint64_t> lcps;
     vector<uint64_t> suffix_sizes;
     vector<uint64_t> suffixes;
-    vector<T> CFG;
     vector<uint64_t> level_rule_counts;
 };
 
@@ -39,31 +38,27 @@ private:
     vector<uint64_t> enc_lcps;
     vector<uint64_t> enc_suf_lens;
     vector<uint64_t> enc_rules;
-    vector<uint64_t> enc_cfg;
     vector<uint64_t> enc_level_rule_counts;
 
 public:
      GCISCodec(GrammarData<T>&& g, size_t orig_sz, size_t alpha_sz) 
         : original_string_sz(orig_sz), alphabet_sz(alpha_sz) 
     {
-        vector<uint64_t> unsigned_cfg_data(g.CFG.begin(), g.CFG.end());
-        
+       
         this->enc_lcps = move(g.lcps);
         this->enc_suf_lens = move(g.suffix_sizes);
         this->enc_rules = move(g.suffixes);
-        this->enc_cfg = simple8b::encode(unsigned_cfg_data);
         this->enc_level_rule_counts = move(g.level_rule_counts);
 
         this->lcps_compressed_sz = enc_lcps.size();
         this->suffix_sizes_compressed_sz = enc_suf_lens.size();
         this->rules_compressed_sz = enc_rules.size();
-        this->cfg_compressed_sz = enc_cfg.size();
         this->level_rule_counts_sz = enc_level_rule_counts.size();
     }
 
     explicit GCISCodec(const vector<uint64_t>& metadata_encoded) 
     {
-        if (metadata_encoded.size() < 7) {
+        if (metadata_encoded.size() < 6) {
             throw runtime_error("Invalid codec vector payload: Header block is truncated.");
         }
 
@@ -72,39 +67,35 @@ public:
         this->lcps_compressed_sz = metadata_encoded[2];
         this->suffix_sizes_compressed_sz = metadata_encoded[3];
         this->rules_compressed_sz = metadata_encoded[4];
-        this->cfg_compressed_sz = metadata_encoded[5];
-        this->level_rule_counts_sz = metadata_encoded[6];
+        this->level_rule_counts_sz = metadata_encoded[5];
 
-        size_t expected_total_size = 7 + lcps_compressed_sz + suffix_sizes_compressed_sz + rules_compressed_sz + cfg_compressed_sz + level_rule_counts_sz;
+        size_t expected_total_size = 6 + lcps_compressed_sz + suffix_sizes_compressed_sz + rules_compressed_sz + level_rule_counts_sz;
         if (metadata_encoded.size() < expected_total_size) {
             throw runtime_error("Corrupted payload: Data stream length is shorter than header specifications.");
         }
 
-        auto it = metadata_encoded.begin() + 7;
+        auto it = metadata_encoded.begin() + 6;
         this->enc_lcps.assign(it, it + lcps_compressed_sz); it += lcps_compressed_sz;
         this->enc_suf_lens.assign(it, it + suffix_sizes_compressed_sz); it += suffix_sizes_compressed_sz;
         this->enc_rules.assign(it, it + rules_compressed_sz); it += rules_compressed_sz;
-        this->enc_cfg.assign(it, it + cfg_compressed_sz); it += cfg_compressed_sz;
         this->enc_level_rule_counts.assign(it, it + level_rule_counts_sz);
     }
 
     vector<uint64_t> encode() const
     {
         vector<uint64_t> payload;
-        payload.reserve(7 + lcps_compressed_sz + suffix_sizes_compressed_sz + rules_compressed_sz + cfg_compressed_sz + level_rule_counts_sz);
+        payload.reserve(6 + lcps_compressed_sz + suffix_sizes_compressed_sz + rules_compressed_sz + cfg_compressed_sz + level_rule_counts_sz);
 
         payload.push_back(original_string_sz);
         payload.push_back(alphabet_sz);
         payload.push_back(lcps_compressed_sz);
         payload.push_back(suffix_sizes_compressed_sz);
         payload.push_back(rules_compressed_sz);
-        payload.push_back(cfg_compressed_sz);
         payload.push_back(level_rule_counts_sz);
 
         payload.insert(payload.end(), enc_lcps.begin(), enc_lcps.end());
         payload.insert(payload.end(), enc_suf_lens.begin(), enc_suf_lens.end());
         payload.insert(payload.end(), enc_rules.begin(), enc_rules.end());
-        payload.insert(payload.end(), enc_cfg.begin(), enc_cfg.end());
         payload.insert(payload.end(), enc_level_rule_counts.begin(), enc_level_rule_counts.end());
         return payload;
     }
@@ -115,10 +106,8 @@ public:
         decoded_grammar.lcps = simple8b::decode(this->enc_lcps);
         decoded_grammar.suffix_sizes = simple8b::decode(this->enc_suf_lens);
         decoded_grammar.suffixes = simple8b::decode(this->enc_rules);
-        vector<uint64_t> decoded_cfg = simple8b::decode(this->enc_cfg);
         decoded_grammar.level_rule_counts = simple8b::decode(this->enc_level_rule_counts);
         
-        decoded_grammar.CFG.assign(decoded_cfg.begin(), decoded_cfg.end());
         return decoded_grammar;
     }
 
@@ -182,7 +171,7 @@ public:
     
     ~GCIS() = default;    
 
-    vector<uint64_t> compress(function<bool()> stop_condition)
+    auto compress(function<bool()> stop_condition, vector<uint64_t>& encoded)
     {
         #ifdef EXPERIMENT
         size_t current_text_size = input.size(); 
@@ -224,7 +213,9 @@ public:
                 #endif
             }
         }
-        return encode();
+        auto cfg = CFG;
+        encoded = encode();
+        return CFG;
     }
     
     bool check_encoding()
@@ -249,8 +240,7 @@ public:
         g.suffix_sizes = compressed_sizes;
         g.suffixes = compressed_suf;
         g.level_rule_counts = compressed_levels; 
-        g.CFG = CFG;
-
+        
         GCISCodec<T> codec(move(g), original_string_size, alphabet_size);
         vector<uint64_t> payload = codec.encode();
 
@@ -260,8 +250,7 @@ public:
         return (gr.lcps == raw_lcps) && 
             (gr.suffix_sizes == raw_sizes) && 
             (gr.suffixes == raw_suf) && 
-            (gr.level_rule_counts == raw_levels) &&
-            (gr.CFG == CFG);
+            (gr.level_rule_counts == raw_levels);
     }
 
     vector<uint64_t> encode()
@@ -277,11 +266,9 @@ public:
         g.lcps = temp_lcps.get_data();
         g.suffix_sizes = temp_sizes.get_data();
         g.suffixes = temp_suf.get_data();
-        g.CFG = this->CFG; 
         g.level_rule_counts = temp_levels.get_data();
         
-        size_t total = original_string_size + g.lcps.size();
-        GCISCodec<T> codec(move(g), original_string_size, total);
+        GCISCodec<T> codec(move(g), original_string_size, this->alphabet_size);
         return codec.encode();
     }
 
@@ -295,7 +282,7 @@ public:
     long getLevel() const { return level; }
     size_t getAlphabet_size() const { return alphabet_size; }
 
-    static vector<uint64_t> decompress(const vector<uint64_t>& compressed)
+    static vector<uint64_t> decompress(const vector<uint64_t>& compressed, const vector<T>& cfg_input)
     {
         GCISCodec<T> decoder(compressed);
         GrammarData<T> grammar = decoder.decode();
@@ -344,33 +331,39 @@ public:
             }
         }
 
-        vector<uint64_t> current_string(grammar.CFG.begin(), grammar.CFG.end());
+        vector<uint64_t> current_string(cfg_input.begin(), cfg_input.end());
         vector<uint64_t> next_string;
 
         for (long long r = static_cast<long long>(level_start_positions.size()) - 1; r >= 0; r--)
         {
             size_t level_start_rule = level_start_positions[r];
-            size_t level_end_rule = (r + 1 < static_cast<long long>(level_start_positions.size())) ? level_start_positions[r + 1] : rule_start_positions.size();
-            size_t max_valid_rule_id = level_end_rule - level_start_rule;
+            size_t level_end_rule = (r + 1 < static_cast<long long>(level_start_positions.size())) 
+                                    ? level_start_positions[r + 1] : rule_start_positions.size();
+            size_t total_rules_this_level = level_end_rule - level_start_rule;
 
             next_string.clear();
             next_string.reserve(current_string.size() * 2);
 
             for (uint64_t token : current_string)
             {
-                if (token < max_valid_rule_id)
+                if (token < total_rules_this_level)
                 {
-                    size_t global_rule_id = level_start_rule + token;
+                    size_t local_rule_id = token; 
+                    size_t global_rule_id = level_start_rule + local_rule_id;
                     
                     size_t start_pos = rule_start_positions[global_rule_id];
-                    size_t end_pos = (global_rule_id + 1 < rule_start_positions.size()) ? rule_start_positions[global_rule_id + 1] : rules.size();
+                    size_t end_pos = (global_rule_id + 1 < rule_start_positions.size()) 
+                                    ? rule_start_positions[global_rule_id + 1] : rules.size();
 
                     for (size_t idx = start_pos; idx < end_pos; idx++)
                     {
                         next_string.push_back(rules[idx]);
                     }
                 }
-
+                else
+                {
+                    next_string.push_back(token - total_rules_this_level);
+                }
             }
             
             current_string = move(next_string);
