@@ -150,6 +150,7 @@ int main(int argc, char* argv[])
             break;
         }
     }
+    /*
     vector<size_t> standalone_repair_input;
     standalone_repair_input.reserve(T.size());
     for (char c : T) 
@@ -173,7 +174,9 @@ int main(int argc, char* argv[])
     cout << "- Compression Time: " << time_standalone.count() << "ms\n";
     cout << "- Decompression Time: " << time_decompression_standalone.count() << "ms\n";
     cout << "- Compressed Size: " << standalone_res.size() << " bits\n\n---\n\n";
-    
-    cout << "Re-Pair + GCIS Best Size: " << best_size << " bits - level " << best_level << "\n";
+    */
+        
+    cout << "Best Size: " << best_size << " bits - level " << best_level << "\n";
     return 0;
+
 }
