@@ -1,0 +1,11 @@
+malloc_count ### exiting, total: 121761, peak: 60927, current: 8192
+Read 357 characters. (0.000357 MB)
+Original Size: 357 bytes (2856 bits)
+
+Compression Finished - Repair
+- Compression Time: 1.04425ms
+- Decompression Time: 0.058702ms
+- Compressed Size: 2373 bits
+
+---
+
